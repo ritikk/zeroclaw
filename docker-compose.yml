@@ -41,6 +41,14 @@ services:
       # Gateway API port (override HOST_PORT if 42617 is taken)
       - "${HOST_PORT:-42617}:${ZEROCLAW_GATEWAY_PORT:-42617}"
     
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m
+
     # Resource limits
     deploy:
       resources:

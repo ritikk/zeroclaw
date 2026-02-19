@@ -39,6 +39,8 @@ services:
       - ../target/.zeroclaw/config.toml:/zeroclaw-data/.zeroclaw/config.toml
       # Mount shared workspace
       - ../playground:/zeroclaw-data/workspace
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:42617:42617"
     networks:
@@ -60,6 +62,14 @@ services:
       - SHELL=/bin/bash
     volumes:
       - ../playground:/home/developer/workspace # Mount local playground
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
     networks:
       - dev-net
 

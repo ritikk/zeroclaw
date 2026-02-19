@@ -71,6 +71,14 @@ impl Sandbox for DockerSandbox {
             "1.0",
             "--network",
             "none",
+            "--no-new-privileges",
+            "--cap-drop",
+            "all",
+            "--read-only",
+            "--tmpfs",
+            "/tmp:rw,nosuid,nodev,noexec,size=64m",
+            "--user",
+            "65534:65534",
         ]);
         docker_cmd.arg(&self.image);
         docker_cmd.arg(&program);
@@ -167,6 +175,38 @@ mod tests {
             "must include --cpus limit"
         );
         assert!(args.contains(&"1.0".to_string()), "CPU limit must be 1.0");
+        assert!(
+            args.contains(&"--no-new-privileges".to_string()),
+            "must include --no-new-privileges to block privilege escalation"
+        );
+        assert!(
+            args.contains(&"--cap-drop".to_string()),
+            "must include --cap-drop flag"
+        );
+        assert!(
+            args.contains(&"all".to_string()),
+            "--cap-drop must drop all capabilities"
+        );
+        assert!(
+            args.contains(&"--read-only".to_string()),
+            "must include --read-only to make root filesystem immutable"
+        );
+        assert!(
+            args.contains(&"--tmpfs".to_string()),
+            "must include --tmpfs for writable scratch space"
+        );
+        assert!(
+            args.contains(&"/tmp:rw,nosuid,nodev,noexec,size=64m".to_string()),
+            "tmpfs must be mounted at /tmp with nosuid,nodev,noexec restrictions"
+        );
+        assert!(
+            args.contains(&"--user".to_string()),
+            "must include --user flag"
+        );
+        assert!(
+            args.contains(&"65534:65534".to_string()),
+            "must run as nobody:nogroup (65534:65534)"
+        );
     }
 
     #[test]
