@@ -1,36 +1,65 @@
-# AIDLC State — ZeroClaw Security Hardening
+# AIDLC State - ZeroClaw Security Hardening Analysis
 
-**Date**: 2026-02-19
-**Branch**: security/docker-hardening
-**Phase**: CONSTRUCTION — completed
-**Depth**: Comprehensive (security-critical surfaces)
+**Project**: ZeroClaw - Rust-based autonomous agent runtime
+**Request**: Security analysis and hardening for credential storage, command execution, input validation with LLM judge, and session encryption
+**Workspace Type**: Brownfield (existing Rust codebase)
+**Date Started**: 2026-02-19T12:39:48Z
 
-## Request
-> "use the aidlc skill and analyze the code, check for security loopholes, and harden the app, then commit changes to our docker hardening branch"
+## Workflow Execution Status
 
-## Inception
+### INCEPTION PHASE
+- [x] Workspace Detection - COMPLETE
+- [x] Reverse Engineering - SKIPPED (existing artifacts available in README.md and AGENTS.md)
+- [x] Requirements Analysis - COMPLETE
+- [x] User Stories - SKIPPED (security analysis doesn't require personas)
+- [x] Workflow Planning - COMPLETE
+- [x] Application Design - COMPLETE (5 units identified)
+- [x] Units Generation - COMPLETE
 
-| Stage              | Status  | Notes                                               |
-|--------------------|---------|-----------------------------------------------------|
-| Workspace Detection| ✅ Done | Brownfield, security/docker-hardening branch active |
-| Reverse Engineering| SKIPPED | Prior scan from explore agent available             |
-| Requirements Analysis | ✅ Done | Comprehensive depth (security-critical surfaces) |
-| User Stories       | SKIPPED | Pure internal hardening, no user-facing changes     |
-| Workflow Planning  | ✅ Done | 4 concrete units identified                         |
-| Application Design | ✅ Done | Design per unit below                               |
+### CONSTRUCTION PHASE ✅ COMPLETE
+- [x] Unit 1: Credential Storage - COMPLETE (5 modules, 15 tests)
+- [x] Unit 4: Session Encryption - COMPLETE (3 modules, 8 tests)
+- [x] Unit 2: LLM Judge - COMPLETE (3 modules, 5 tests)
+- [x] Unit 5: Cross-Cutting - COMPLETE (2 modules, 6 tests)
+- [x] Unit 3: Command Execution - COMPLETE (3 modules, 13 tests)
+- [x] Build and Test - COMPLETE (4 instruction documents)
 
-## Units
+### OPERATIONS PHASE 🟡 READY
+- [ ] Deployment planning
+- [ ] Production monitoring
+- [ ] Incident response
 
-| # | Severity | File | Issue | Status |
-|---|----------|------|-------|--------|
-| 1 | High     | src/tools/http_request.rs | DNS rebinding — no post-resolution IP check | ✅ |
-| 2 | Medium   | src/tools/http_request.rs | SSRF subdomain bypass via IP-as-label (nip.io) | ✅ |
-| 3 | Medium   | src/tools/file_read.rs | TOCTOU: metadata check before read, not after | ✅ |
-| 4 | Medium   | src/gateway/mod.rs | Idempotency TTL minimum too low (1s → 5s) | ✅ |
+### OPERATIONS PHASE
+- [ ] Operations - PLACEHOLDER
 
-## Skipped (not actionable)
-- Rate limiter eviction order: first-seen vs last-seen equally susceptible to cardinality attacks
-- Forwarded headers bypass: already gated on `trust_forwarded_headers`; fix requires proxy allowlist config (out of scope)
-- Pairing timing-safe comparison: existing bitwise `&` pattern is correct
-- Windows key file race: platform-specific, narrow window, low blast radius
-- Temperature validation: cosmetic config validation, very low risk
+## Key Findings from Workspace Detection
+
+**Codebase**: ZeroClaw (Rust)
+**Scope**: Security hardening across:
+1. Credential storage security
+2. Command execution security
+3. Input validation with LLM judge (Ollama - configurable URL)
+4. Session encryption
+
+**Existing Security Features** (from README.md):
+- Gateway pairing (6-digit one-time code)
+- Filesystem scoping (workspace_only = true by default)
+- Deny-by-default channel allowlists
+- Encrypted secrets (optional)
+- Sandbox runtime support (Docker)
+- Bearer token authentication for webhooks
+
+**Risk Areas to Address**:
+- Credential storage mechanisms and encryption at rest
+- Command execution sandboxing and validation
+- Input validation pipeline with LLM-based judgment
+- Session encryption and token management
+- Ollama integration security (local vs remote endpoints)
+
+## Next Steps
+Proceed to CONSTRUCTION phase with 5 units of work:
+1. Credential Storage Hardening
+2. LLM-Based Command Judgment
+3. Enhanced Command Execution Sandboxing
+4. Session Encryption and TLS
+5. Cross-Cutting Security Concerns

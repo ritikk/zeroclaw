@@ -1,16 +1,24 @@
-# syntax=docker/dockerfile:1.7
+FROM rust:1.70 as builder
 
-# ── Stage 1: Build ────────────────────────────────────────────
-FROM rust:1.93-slim@sha256:9663b80a1621253d30b146454f903de48f0af925c967be48c84745537cd35d8b AS builder
+WORKDIR /build
+
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+
+RUN cargo build --release --locked
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/zeroclaw /usr/local/bin/
 
 WORKDIR /app
 
-# Install build dependencies
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y \
-        pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+ENV ZEROCLAW_WORKSPACE=/app/workspace
+ENV ZEROCLAW_CONFIG=/app/.zeroclaw
 
 # 1. Copy manifests to cache dependencies
 COPY Cargo.toml Cargo.lock ./

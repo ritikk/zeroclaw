@@ -38,6 +38,10 @@ pub mod pairing;
 pub mod policy;
 pub mod secrets;
 pub mod traits;
+pub mod credential_vault;
+pub mod key_rotation;
+pub mod access_control;
+pub mod security_logging;
 
 #[allow(unused_imports)]
 pub use audit::{AuditEvent, AuditEventType, AuditLogger};
