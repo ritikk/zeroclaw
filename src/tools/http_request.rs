@@ -137,7 +137,24 @@ impl HttpRequestTool {
             request = request.body(body_str.to_string());
         }
 
-        Ok(request.send().await?)
+        let response = request.send().await?;
+
+        // Post-connection guard against DNS rebinding: validate the resolved IP is
+        // not a private or local address. This catches cases where the hostname
+        // passed pre-request validation but DNS resolved to an internal address at
+        // connection time (e.g. low-TTL rebinding or attacker-controlled DNS).
+        // remote_addr() returns None when a proxy is in use; we skip the check
+        // rather than fail closed, since the proxy itself is trusted infrastructure.
+        if let Some(addr) = response.remote_addr() {
+            if is_private_or_local_host(&addr.ip().to_string()) {
+                anyhow::bail!(
+                    "Connection rejected: resolved IP {} is a private or local address",
+                    addr.ip()
+                );
+            }
+        }
+
+        Ok(response)
     }
 
     fn truncate_response(&self, text: &str) -> String {
@@ -382,10 +399,20 @@ fn host_matches_allowlist(host: &str, allowed_domains: &[String]) -> bool {
     }
 
     allowed_domains.iter().any(|domain| {
-        host == domain
-            || host
-                .strip_suffix(domain)
-                .is_some_and(|prefix| prefix.ends_with('.'))
+        if host == domain {
+            return true;
+        }
+        // Require a proper subdomain (prefix ends with '.') and reject if the
+        // subdomain portion is itself a raw IP address.  This blocks nip.io-style
+        // bypasses where "192.168.1.1.allowed.com" would otherwise match the
+        // "allowed.com" allowlist entry and then resolve to a private IP.
+        host.strip_suffix(domain).is_some_and(|prefix| {
+            prefix.ends_with('.')
+                && prefix
+                    .trim_end_matches('.')
+                    .parse::<std::net::IpAddr>()
+                    .is_err()
+        })
     })
 }
 
@@ -835,6 +862,52 @@ mod tests {
         // The actual Policy::none() enforcement is in execute_request's client builder.
         let tool = test_tool(vec!["example.com"]);
         assert_eq!(tool.name(), "http_request");
+    }
+
+    // ── §1.5 nip.io / IP-as-subdomain-label SSRF bypass defense ─────
+    // An operator who allowlists "example.com" must not be bypassable via
+    // "192.168.1.1.example.com" even though it's syntactically a subdomain.
+    #[test]
+    fn ssrf_blocks_ipv4_subdomain_label_bypass() {
+        assert!(
+            !host_matches_allowlist(
+                "192.168.1.1.example.com",
+                &["example.com".to_string()]
+            ),
+            "private IPv4 as subdomain label must not match allowlist"
+        );
+        assert!(
+            !host_matches_allowlist(
+                "127.0.0.1.example.com",
+                &["example.com".to_string()]
+            ),
+            "loopback IPv4 as subdomain label must not match allowlist"
+        );
+        assert!(
+            !host_matches_allowlist("10.0.0.1.example.com", &["example.com".to_string()]),
+            "RFC-1918 10/8 as subdomain label must not match allowlist"
+        );
+    }
+
+    #[test]
+    fn ssrf_blocks_ipv6_subdomain_label_bypass() {
+        assert!(
+            !host_matches_allowlist("::1.example.com", &["example.com".to_string()]),
+            "IPv6 loopback as subdomain label must not match allowlist"
+        );
+    }
+
+    #[test]
+    fn ssrf_allowlist_still_accepts_legitimate_subdomains_with_numbers() {
+        // Numeric subdomains that are NOT full IP addresses must still be allowed.
+        assert!(
+            host_matches_allowlist("api2.example.com", &["example.com".to_string()]),
+            "numeric suffix on label is not an IP and must be allowed"
+        );
+        assert!(
+            host_matches_allowlist("v3.api.example.com", &["example.com".to_string()]),
+            "version-prefixed nested subdomain must be allowed"
+        );
     }
 
     // ── §1.4 DNS rebinding / SSRF defense-in-depth tests ─────

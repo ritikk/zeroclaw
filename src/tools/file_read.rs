@@ -132,6 +132,19 @@ impl Tool for FileReadTool {
 
         match tokio::fs::read_to_string(&resolved_path).await {
             Ok(contents) => {
+                // Defense-in-depth: re-check size on actual content to guard against
+                // TOCTOU where the file grows between the metadata check above and here.
+                if contents.len() as u64 > MAX_FILE_SIZE_BYTES {
+                    return Ok(ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some(format!(
+                            "File too large: {} bytes (limit: {MAX_FILE_SIZE_BYTES} bytes)",
+                            contents.len()
+                        )),
+                    });
+                }
+
                 let lines: Vec<&str> = contents.lines().collect();
                 let total = lines.len();
 

@@ -81,6 +81,9 @@ fn hash_webhook_secret(value: &str) -> String {
 
 /// How often the rate limiter sweeps stale IP entries from its map.
 const RATE_LIMITER_SWEEP_INTERVAL_SECS: u64 = 300; // 5 minutes
+/// Minimum idempotency TTL — long enough to cover network jitter and clock skew
+/// across legitimate duplicate deliveries from webhooks / message queues.
+const IDEMPOTENCY_TTL_MIN_SECS: u64 = 5;
 
 #[derive(Debug)]
 struct SlidingWindowRateLimiter {
@@ -543,7 +546,12 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         IDEMPOTENCY_MAX_KEYS_DEFAULT,
     );
     let idempotency_store = Arc::new(IdempotencyStore::new(
-        Duration::from_secs(config.gateway.idempotency_ttl_secs.max(1)),
+        Duration::from_secs(
+            config
+                .gateway
+                .idempotency_ttl_secs
+                .max(IDEMPOTENCY_TTL_MIN_SECS),
+        ),
         idempotency_max_keys,
     ));
 
@@ -2766,5 +2774,31 @@ mod tests {
 
         // Should be allowed again
         assert!(limiter.allow("burst-ip"));
+    }
+
+    // ── §1.6 Idempotency TTL minimum ─────────────────────────────────
+
+    #[test]
+    fn idempotency_store_enforces_minimum_ttl() {
+        // Values below IDEMPOTENCY_TTL_MIN_SECS must be clamped to the minimum.
+        let floor = Duration::from_secs(IDEMPOTENCY_TTL_MIN_SECS);
+        let store_low = IdempotencyStore::new(Duration::from_secs(1), 100);
+        let store_exact = IdempotencyStore::new(floor, 100);
+
+        // Both stores should accept a fresh key.
+        assert!(store_low.record_if_new("key-a"));
+        assert!(store_exact.record_if_new("key-b"));
+
+        // A repeated key must be rejected regardless of TTL.
+        assert!(!store_low.record_if_new("key-a"));
+        assert!(!store_exact.record_if_new("key-b"));
+    }
+
+    #[test]
+    fn idempotency_ttl_min_secs_constant_is_at_least_five() {
+        assert!(
+            IDEMPOTENCY_TTL_MIN_SECS >= 5,
+            "minimum idempotency TTL must be at least 5 seconds"
+        );
     }
 }
