@@ -3,6 +3,9 @@ firmware/*/target
 
 # Runtime data directory (agent state, memory, workspace files)
 data/
+
+# Agent workspace (sandbox working directory)
+playground/
 *.db
 *.db-journal
 .DS_Store
