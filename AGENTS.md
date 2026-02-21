@@ -482,3 +482,87 @@ When working in fast iterative mode:
 - Prefer deterministic behavior over clever shortcuts.
 - Do not “ship and hope” on security-sensitive paths.
 - If uncertain, leave a concrete TODO with verification context, not a hidden guess.
+
+## 13) Local Development Environment
+
+This section documents the fork/remote layout and Docker dev environment for this contributor context.
+
+### 13.1 Git Remotes
+
+| Remote | URL | Purpose |
+|--------|-----|---------|
+| `origin` | `git@github.com:ritikk/zeroclaw.git` | Personal fork — push branches and open PRs here |
+| `upstream` | `https://github.com/zeroclaw-labs/zeroclaw.git` | Canonical repo — pull main updates from here |
+
+**Workflow:**
+- Pull upstream changes: `git fetch upstream && git merge upstream/main`
+- Push feature branches to `origin`, open PRs from fork → upstream
+- Never push directly to `upstream/main`
+
+### 13.2 Docker Containers
+
+The dev environment runs two containers defined in `dev/docker-compose.yml`.
+
+**Bring up / tear down:**
+```bash
+# from repo root
+docker compose -f dev/docker-compose.yml up -d
+docker compose -f dev/docker-compose.yml down
+```
+
+**Container: `zeroclaw-dev`**
+
+The agent process. Runs the gateway and all agent logic.
+
+| Property | Value |
+|----------|-------|
+| Image stage | `dev` (Debian, from root `Dockerfile`) |
+| Gateway port | `127.0.0.1:42617` |
+| Provider | OpenRouter (configured in `data/.zeroclaw/config.toml`) |
+| LLM judge | Local Ollama at `host.docker.internal:11434` — used for prompt sanitization |
+
+Volumes mounted:
+
+| Host path | Container path | Notes |
+|-----------|----------------|-------|
+| `data/.zeroclaw/` | `/zeroclaw-data/.zeroclaw/` | Full dir — config, secret key, SQLite memory DB, daemon state |
+| `playground/` | `/zeroclaw-data/workspace/` | Agent workspace |
+| `.env` | `/run/secrets/zeroclaw_env` | Read-only env secrets, sourced at startup |
+
+**Container: `zeroclaw-sandbox`**
+
+Throwaway Ubuntu execution environment. The agent runs shell commands here via the `SANDBOX_HOST` mechanism. Not the agent process itself.
+
+| Host path | Container path |
+|-----------|----------------|
+| `playground/` | `/home/developer/workspace/` |
+
+**CLI usage:**
+
+The CLI runs on the host and talks to the gateway over HTTP:
+```bash
+zeroclaw chat    # connects to localhost:42617
+zeroclaw status
+```
+
+### 13.3 Persistent Data
+
+All persistent agent state lives under `data/.zeroclaw/` on the host (gitignored).
+
+| File | Purpose | Permissions |
+|------|---------|-------------|
+| `config.toml` | All configuration including channels, provider, memory settings | `0600` |
+| `.secret_key` | ChaCha20-Poly1305 master key for `enc2:` encrypted config values | `0600` |
+| `*.db` | SQLite memory database | — |
+| `daemon_state.json` | Scheduler and daemon state | — |
+
+**Important:** `.secret_key` must be present for the agent to decrypt any `enc2:`-prefixed values in `config.toml`. If the key is lost, encrypted credentials cannot be recovered — store a backup separately.
+
+The `playground/` workspace directory is also gitignored and shared between both containers.
+
+### 13.4 Secrets Handling
+
+- `[secrets] encrypt = true` is set in `config.toml`
+- On first write of any API key or token, zeroclaw re-encrypts it as `enc2:<hex>` (ChaCha20-Poly1305 with random nonce)
+- Until a write triggers re-encryption, values written manually stay as plaintext — run `zeroclaw config set` on any key to force encryption
+- The `.env` file holds provider API keys sourced into the container at startup; it is gitignored and never committed
