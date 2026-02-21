@@ -13,6 +13,7 @@ pub mod static_files;
 pub mod ws;
 
 use crate::channels::{Channel, LinqChannel, NextcloudTalkChannel, SendMessage, WatiChannel, WhatsAppChannel};
+use crate::tools::llm_judge::{JudgmentPolicy, OllamaClient, PolicyAction};
 use crate::config::Config;
 use crate::cost::CostTracker;
 use crate::memory::{self, Memory, MemoryCategory};
@@ -311,6 +312,8 @@ pub struct AppState {
     pub cost_tracker: Option<Arc<CostTracker>>,
     /// SSE broadcast channel for real-time events
     pub event_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
+    /// Optional LLM judge for prompt sanitization before forwarding to main provider
+    pub judge: Option<Arc<OllamaClient>>,
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
@@ -626,6 +629,17 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
             event_tx.clone(),
         ));
 
+    let judge = match (
+        config.gateway.llm_judge_endpoint.as_deref(),
+        config.gateway.llm_judge_model.as_deref(),
+    ) {
+        (Some(ep), Some(model)) if !ep.is_empty() && !model.is_empty() => {
+            tracing::info!("LLM judge enabled endpoint={ep} model={model}");
+            Some(Arc::new(OllamaClient::new(ep.to_string(), model.to_string())))
+        }
+        _ => None,
+    };
+
     let state = AppState {
         config: config_state,
         provider,
@@ -649,6 +663,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         tools_registry,
         cost_tracker,
         event_tx,
+        judge,
     };
 
     // Config PUT needs larger body limit (1MB)
@@ -954,6 +969,44 @@ async fn handle_webhook(
     }
 
     let message = &webhook_body.message;
+
+    // ── LLM Judge: sanitize input before forwarding to main provider ──
+    if let Some(ref judge_client) = state.judge {
+        match judge_client.judge_input(message).await {
+            Ok(judgment) => {
+                let policy = JudgmentPolicy::new();
+                match policy.get_action(judgment.category) {
+                    PolicyAction::Deny => {
+                        tracing::warn!(
+                            "Webhook: LLM judge blocked input \
+                             category={:?} confidence={} reason={}",
+                            judgment.category,
+                            judgment.confidence,
+                            judgment.reasoning,
+                        );
+                        let err = serde_json::json!({
+                            "error": "Input rejected by security policy",
+                            "category": format!("{:?}", judgment.category),
+                        });
+                        return (StatusCode::FORBIDDEN, Json(err));
+                    }
+                    PolicyAction::RequireConfirmation => {
+                        tracing::warn!(
+                            "Webhook: LLM judge flagged input (proceeding) \
+                             category={:?} confidence={}",
+                            judgment.category,
+                            judgment.confidence,
+                        );
+                    }
+                    PolicyAction::Allow => {}
+                }
+            }
+            Err(e) => {
+                // Fail open — judge unavailability must not break the gateway
+                tracing::warn!("LLM judge unavailable, proceeding: {e}");
+            }
+        }
+    }
 
     if state.auto_save {
         let key = webhook_memory_key();

@@ -774,6 +774,13 @@ pub struct GatewayConfig {
     /// Maximum distinct idempotency keys retained in memory.
     #[serde(default = "default_gateway_idempotency_max_keys")]
     pub idempotency_max_keys: usize,
+
+    /// Ollama endpoint for LLM judge prompt sanitization (e.g. "http://host.docker.internal:11434")
+    #[serde(default)]
+    pub llm_judge_endpoint: Option<String>,
+    /// Ollama model for LLM judge (e.g. "gemma3n:e2b")
+    #[serde(default)]
+    pub llm_judge_model: Option<String>,
 }
 
 fn default_gateway_port() -> u16 {
@@ -822,6 +829,8 @@ impl Default for GatewayConfig {
             rate_limit_max_keys: default_gateway_rate_limit_max_keys(),
             idempotency_ttl_secs: default_idempotency_ttl_secs(),
             idempotency_max_keys: default_gateway_idempotency_max_keys(),
+            llm_judge_endpoint: None,
+            llm_judge_model: None,
         }
     }
 }
@@ -4077,6 +4086,12 @@ impl Config {
                 self.api_key = Some(key);
             }
         }
+        // API URL: ZEROCLAW_API_URL (e.g. "http://host.docker.internal:11434" for remote Ollama)
+        if let Ok(url) = std::env::var("ZEROCLAW_API_URL") {
+            if !url.is_empty() {
+                self.api_url = Some(url);
+            }
+        }
         // API Key: GLM_API_KEY overrides when provider is a GLM/Zhipu variant.
         if self.default_provider.as_deref().is_some_and(is_glm_alias) {
             if let Ok(key) = std::env::var("GLM_API_KEY") {
@@ -4184,6 +4199,19 @@ impl Config {
         // Allow public bind: ZEROCLAW_ALLOW_PUBLIC_BIND
         if let Ok(val) = std::env::var("ZEROCLAW_ALLOW_PUBLIC_BIND") {
             self.gateway.allow_public_bind = val == "1" || val.eq_ignore_ascii_case("true");
+        }
+
+        // LLM judge endpoint: OLLAMA_ENDPOINT
+        if let Ok(ep) = std::env::var("OLLAMA_ENDPOINT") {
+            if !ep.is_empty() {
+                self.gateway.llm_judge_endpoint = Some(ep);
+            }
+        }
+        // LLM judge model: OLLAMA_MODEL
+        if let Ok(m) = std::env::var("OLLAMA_MODEL") {
+            if !m.is_empty() {
+                self.gateway.llm_judge_model = Some(m);
+            }
         }
 
         // Temperature: ZEROCLAW_TEMPERATURE

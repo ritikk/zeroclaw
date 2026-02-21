@@ -1,24 +1,16 @@
-FROM rust:1.70 as builder
+# syntax=docker/dockerfile:1.7
 
-WORKDIR /build
-
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-
-RUN cargo build --release --locked
-
-FROM debian:bookworm-slim
-
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /build/target/release/zeroclaw /usr/local/bin/
+# ── Stage 1: Build ────────────────────────────────────────────
+FROM rust:1.93-slim@sha256:9663b80a1621253d30b146454f903de48f0af925c967be48c84745537cd35d8b AS builder
 
 WORKDIR /app
 
-ENV ZEROCLAW_WORKSPACE=/app/workspace
-ENV ZEROCLAW_CONFIG=/app/.zeroclaw
+# Install build dependencies
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
 # 1. Copy manifests to cache dependencies
 COPY Cargo.toml Cargo.lock ./
@@ -98,16 +90,11 @@ COPY dev/config.template.toml /zeroclaw-data/.zeroclaw/config.toml
 RUN chown 65534:65534 /zeroclaw-data/.zeroclaw/config.toml
 
 # Environment setup
-# Use consistent workspace path
 ENV ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace
 ENV HOME=/zeroclaw-data
-# Defaults for local dev (Ollama) - matches config.template.toml
 ENV PROVIDER="ollama"
 ENV ZEROCLAW_MODEL="llama3.2"
 ENV ZEROCLAW_GATEWAY_PORT=42617
-
-# Note: API_KEY is intentionally NOT set here to avoid confusion.
-# It is set in config.toml as the Ollama URL.
 
 WORKDIR /zeroclaw-data
 USER 65534:65534
@@ -124,8 +111,6 @@ COPY --from=builder /zeroclaw-data /zeroclaw-data
 # Environment setup
 ENV ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace
 ENV HOME=/zeroclaw-data
-# Default provider and model are set in config.toml, not here,
-# so config file edits are not silently overridden
 #ENV PROVIDER=
 ENV ZEROCLAW_GATEWAY_PORT=42617
 
