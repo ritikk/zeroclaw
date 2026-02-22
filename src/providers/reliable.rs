@@ -370,6 +370,8 @@ impl Provider for ReliableProvider {
                             }
 
                             if non_retryable {
+                                eprintln!("[Provider Error] Provider: {}, Model: {}", provider_name, current_model);
+                                eprintln!("[Provider Error] Full error details:\n{:#?}", e);
                                 tracing::warn!(
                                     provider = provider_name,
                                     model = *current_model,
@@ -488,6 +490,8 @@ impl Provider for ReliableProvider {
                             }
 
                             if non_retryable {
+                                eprintln!("[Provider Error] Provider: {}, Model: {}", provider_name, current_model);
+                                eprintln!("[Provider Error] Full error details:\n{:#?}", e);
                                 tracing::warn!(
                                     provider = provider_name,
                                     model = *current_model,
@@ -612,6 +616,8 @@ impl Provider for ReliableProvider {
                             }
 
                             if non_retryable {
+                                eprintln!("[Provider Error] Provider: {}, Model: {}", provider_name, current_model);
+                                eprintln!("[Provider Error] Full error details:\n{:#?}", e);
                                 tracing::warn!(
                                     provider = provider_name,
                                     model = *current_model,
@@ -723,6 +729,8 @@ impl Provider for ReliableProvider {
                             }
 
                             if non_retryable {
+                                eprintln!("[Provider Error] Provider: {}, Model: {}", provider_name, current_model);
+                                eprintln!("[Provider Error] Full error details:\n{:#?}", e);
                                 tracing::warn!(
                                     provider = provider_name,
                                     model = *current_model,
