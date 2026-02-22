@@ -402,7 +402,8 @@ impl TelegramChannel {
     fn try_add_ack_reaction_nonblocking(&self, chat_id: String, message_id: i64) {
         let client = self.http_client();
         let url = self.api_url("setMessageReaction");
-        let emoji = random_telegram_ack_reaction().to_string();
+        // Use eyes emoji to indicate message is being processed (more universally supported than ACK)
+        let emoji = "👀".to_string();
         let body = build_telegram_ack_reaction_request(&chat_id, message_id, &emoji);
 
         tokio::spawn(async move {
@@ -410,7 +411,7 @@ impl TelegramChannel {
                 Ok(resp) => resp,
                 Err(err) => {
                     tracing::warn!(
-                        "Telegram: failed to add ACK reaction to chat_id={chat_id}, message_id={message_id}: {err}"
+                        "Telegram: failed to add processing reaction to chat_id={chat_id}, message_id={message_id}: {err}"
                     );
                     return;
                 }
@@ -419,8 +420,8 @@ impl TelegramChannel {
             if !response.status().is_success() {
                 let status = response.status();
                 let err_body = response.text().await.unwrap_or_default();
-                tracing::warn!(
-                    "Telegram: add ACK reaction failed for chat_id={chat_id}, message_id={message_id}: status={status}, body={err_body}"
+                tracing::debug!(
+                    "Telegram: processing reaction not supported on this instance (chat_id={chat_id}, message_id={message_id}): status={status}"
                 );
             }
         });

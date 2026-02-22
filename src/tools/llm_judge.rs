@@ -71,14 +71,16 @@ impl OllamaClient {
             Ok(response) => {
                 match response.json::<serde_json::Value>().await {
                     Ok(data) => {
+                        eprintln!("[LLM Judge] Ollama response: {}", serde_json::to_string_pretty(&data).unwrap_or_default());
                         if let Some(response_text) = data.get("response").and_then(|v| v.as_str()) {
+                            eprintln!("[LLM Judge] Response text: {}", response_text);
                             // Parse JSON response from Ollama
                             if let Ok(judgment_json) = serde_json::from_str::<serde_json::Value>(response_text) {
                                 let category = judgment_json
                                     .get("category")
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("Unknown");
-                                
+
                                 let category = match category {
                                     "Safe" => JudgmentCategory::Safe,
                                     "Suspicious" => JudgmentCategory::Suspicious,
@@ -103,7 +105,11 @@ impl OllamaClient {
                                     reasoning,
                                     timestamp: Utc::now(),
                                 });
+                            } else {
+                                eprintln!("[LLM Judge] Failed to parse response text as JSON: {}", response_text);
                             }
+                        } else {
+                            eprintln!("[LLM Judge] No 'response' field in Ollama output: {}", serde_json::to_string_pretty(&data).unwrap_or_default());
                         }
                         Err("Failed to parse Ollama response".to_string())
                     }
