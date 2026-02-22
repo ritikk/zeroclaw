@@ -5,10 +5,11 @@ use serde_json::json;
 use std::time::Duration;
 
 /// Web search tool for searching the internet.
-/// Supports multiple providers: DuckDuckGo (free), Brave (requires API key).
+/// Supports multiple providers: DuckDuckGo (free), Brave (requires API key), Tavily (requires API key).
 pub struct WebSearchTool {
     provider: String,
     brave_api_key: Option<String>,
+    tavily_api_key: Option<String>,
     max_results: usize,
     timeout_secs: u64,
 }
@@ -17,12 +18,14 @@ impl WebSearchTool {
     pub fn new(
         provider: String,
         brave_api_key: Option<String>,
+        tavily_api_key: Option<String>,
         max_results: usize,
         timeout_secs: u64,
     ) -> Self {
         Self {
             provider: provider.trim().to_lowercase(),
             brave_api_key,
+            tavily_api_key,
             max_results: max_results.clamp(1, 10),
             timeout_secs: timeout_secs.max(1),
         }
@@ -162,6 +165,60 @@ impl WebSearchTool {
 
         Ok(lines.join("\n"))
     }
+
+    async fn search_tavily(&self, query: &str) -> anyhow::Result<String> {
+        let api_key = self
+            .tavily_api_key
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Tavily API key not configured (set web_search.tavily_api_key)"))?;
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(self.timeout_secs))
+            .build()?;
+
+        let body = serde_json::json!({
+            "api_key": api_key,
+            "query": query,
+            "max_results": self.max_results,
+        });
+
+        let response = client
+            .post("https://api.tavily.com/search")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Tavily search failed with status: {}", response.status());
+        }
+
+        let json: serde_json::Value = response.json().await?;
+        let results = json
+            .get("results")
+            .and_then(|r| r.as_array())
+            .ok_or_else(|| anyhow::anyhow!("Invalid Tavily response: missing results array"))?;
+
+        if results.is_empty() {
+            return Ok(format!("No results found for: {}", query));
+        }
+
+        let mut lines = vec![format!("Search results for: {} (via Tavily)", query)];
+
+        for (i, result) in results.iter().take(self.max_results).enumerate() {
+            let title = result.get("title").and_then(|t| t.as_str()).unwrap_or("No title");
+            let url = result.get("url").and_then(|u| u.as_str()).unwrap_or("");
+            let content = result.get("content").and_then(|c| c.as_str()).unwrap_or("");
+
+            lines.push(format!("{}. {}", i + 1, title));
+            lines.push(format!("   {}", url));
+            if !content.is_empty() {
+                let snippet = if content.len() > 300 { &content[..300] } else { content };
+                lines.push(format!("   {}", snippet));
+            }
+        }
+
+        Ok(lines.join("\n"))
+    }
 }
 
 fn decode_ddg_redirect_url(raw_url: &str) -> String {
@@ -219,8 +276,9 @@ impl Tool for WebSearchTool {
         let result = match self.provider.as_str() {
             "duckduckgo" | "ddg" => self.search_duckduckgo(query).await?,
             "brave" => self.search_brave(query).await?,
+            "tavily" => self.search_tavily(query).await?,
             _ => anyhow::bail!(
-                "Unknown search provider: '{}'. Set tools.web_search.provider to 'duckduckgo' or 'brave' in config.toml",
+                "Unknown search provider: '{}'. Set web_search.provider to 'duckduckgo', 'brave', or 'tavily' in config.toml",
                 self.provider
             ),
         };

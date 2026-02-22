@@ -1037,12 +1037,15 @@ pub struct WebSearchConfig {
     /// Enable `web_search_tool` for web searches
     #[serde(default)]
     pub enabled: bool,
-    /// Search provider: "duckduckgo" (free, no API key) or "brave" (requires API key)
+    /// Search provider: "duckduckgo" (free, no API key), "brave" (requires API key), or "tavily" (requires API key)
     #[serde(default = "default_web_search_provider")]
     pub provider: String,
     /// Brave Search API key (required if provider is "brave")
     #[serde(default)]
     pub brave_api_key: Option<String>,
+    /// Tavily API key (required if provider is "tavily")
+    #[serde(default)]
+    pub tavily_api_key: Option<String>,
     /// Maximum results per search (1-10)
     #[serde(default = "default_web_search_max_results")]
     pub max_results: usize,
@@ -1069,6 +1072,7 @@ impl Default for WebSearchConfig {
             enabled: false,
             provider: default_web_search_provider(),
             brave_api_key: None,
+            tavily_api_key: None,
             max_results: default_web_search_max_results(),
             timeout_secs: default_web_search_timeout_secs(),
         }
