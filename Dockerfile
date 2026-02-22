@@ -80,7 +80,12 @@ FROM debian:trixie-slim@sha256:f6e2cfac5cf956ea044b4bd75e6397b4372ad88fe00908045
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
+    git \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
+
+COPY python/ /tmp/zeroclaw-tools/
+RUN pip install /tmp/zeroclaw-tools --break-system-packages && rm -rf /tmp/zeroclaw-tools
 
 COPY --from=builder /zeroclaw-data /zeroclaw-data
 COPY --from=builder /app/zeroclaw /usr/local/bin/zeroclaw

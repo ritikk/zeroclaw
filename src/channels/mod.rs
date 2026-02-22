@@ -223,6 +223,8 @@ struct ChannelRuntimeContext {
     multimodal: crate::config::MultimodalConfig,
     hooks: Option<Arc<crate::hooks::HookRunner>>,
     non_cli_excluded_tools: Arc<Vec<String>>,
+    llm_judge_endpoint: Option<String>,
+    llm_judge_model: Option<String>,
 }
 
 #[derive(Clone)]
@@ -1481,6 +1483,46 @@ async fn process_channel_message(
 ) {
     if cancellation_token.is_cancelled() {
         return;
+    }
+
+    // LLM judge: sanitize raw channel input before any processing
+    if let (Some(ep), Some(model)) = (
+        ctx.llm_judge_endpoint.as_deref(),
+        ctx.llm_judge_model.as_deref(),
+    ) {
+        if !ep.is_empty() && !model.is_empty() {
+            use crate::tools::llm_judge::{JudgmentPolicy, OllamaClient, PolicyAction};
+            let judge = OllamaClient::new(ep.to_string(), model.to_string());
+            match judge.judge_input(&msg.content).await {
+                Ok(judgment) => {
+                    let policy = JudgmentPolicy::new();
+                    match policy.get_action(judgment.category) {
+                        PolicyAction::Deny => {
+                            tracing::warn!(
+                                channel = %msg.channel,
+                                sender = %msg.sender,
+                                reasoning = %judgment.reasoning,
+                                "Message blocked by content policy"
+                            );
+                            return;
+                        }
+                        PolicyAction::RequireConfirmation => {
+                            tracing::warn!(
+                                channel = %msg.channel,
+                                sender = %msg.sender,
+                                reasoning = %judgment.reasoning,
+                                "LLM judge flagged message as suspicious, proceeding"
+                            );
+                        }
+                        PolicyAction::Allow => {}
+                    }
+                }
+                Err(e) => {
+                    // Fail-open: judge unavailability must not block channels
+                    tracing::warn!("LLM judge unavailable, proceeding: {e}");
+                }
+            }
+        }
     }
 
     println!(
@@ -3289,6 +3331,8 @@ pub async fn start_channels(config: Config) -> Result<()> {
             None
         },
         non_cli_excluded_tools: Arc::new(config.autonomy.non_cli_excluded_tools.clone()),
+        llm_judge_endpoint: config.gateway.llm_judge_endpoint.clone(),
+        llm_judge_model: config.gateway.llm_judge_model.clone(),
     });
 
     run_message_dispatch_loop(rx, runtime_ctx, max_in_flight_messages).await;

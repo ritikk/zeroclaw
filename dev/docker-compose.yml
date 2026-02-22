@@ -39,6 +39,10 @@ services:
       - ../target/.zeroclaw/config.toml:/zeroclaw-data/.zeroclaw/config.toml
       # Mount shared workspace
       - ../playground:/zeroclaw-data/workspace
+      # Open-skills repository (cloned by zeroclaw at runtime)
+      - ../data/open-skills:/zeroclaw-data/open-skills
+      # Network share — Collab dropzone (SMB //192.168.4.41/ritikclaw/Collab mounted on host)
+      - ../mounts/clawshared/Collab:/zeroclaw-data/clawshared
     security_opt:
       - no-new-privileges:true
     ports:

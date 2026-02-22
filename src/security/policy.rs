@@ -752,7 +752,7 @@ impl SecurityPolicy {
             if !self
                 .allowed_commands
                 .iter()
-                .any(|allowed| allowed == base_cmd)
+                .any(|allowed| allowed == "*" || allowed == base_cmd)
             {
                 return false;
             }

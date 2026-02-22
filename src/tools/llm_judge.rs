@@ -36,7 +36,7 @@ impl OllamaClient {
         Self {
             endpoint,
             model,
-            timeout_ms: 5000,
+            timeout_ms: 30_000,
         }
     }
 
