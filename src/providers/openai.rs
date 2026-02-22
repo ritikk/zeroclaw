@@ -217,10 +217,15 @@ impl OpenAiProvider {
                                         },
                                     })
                                     .collect::<Vec<_>>();
+                                // Some providers (e.g. Arcee Trinity) require the
+                                // content field to be present even when the assistant
+                                // message only contains tool_calls and has no text.
+                                // Default to empty string rather than omitting the field.
                                 let content = value
                                     .get("content")
                                     .and_then(serde_json::Value::as_str)
-                                    .map(ToString::to_string);
+                                    .map(ToString::to_string)
+                                    .or_else(|| Some(String::new()));
                                 let reasoning_content = value
                                     .get("reasoning_content")
                                     .and_then(serde_json::Value::as_str)
