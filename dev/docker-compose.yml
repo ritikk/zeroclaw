@@ -35,8 +35,10 @@ services:
         fi
         exec zeroclaw daemon --port "${ZEROCLAW_GATEWAY_PORT:-42617}" --host "[::]"
     volumes:
-      # Mount single config file (avoids shadowing other files in .zeroclaw)
-      - ../target/.zeroclaw/config.toml:/zeroclaw-data/.zeroclaw/config.toml
+      # Mount full .zeroclaw dir so config, secret key, SQLite memory DB, and
+      # daemon state all persist across restarts. Secret key must be collocated
+      # with config.toml for ChaCha20-Poly1305 decryption to work.
+      - ../data/.zeroclaw:/zeroclaw-data/.zeroclaw
       # Mount shared workspace
       - ../playground:/zeroclaw-data/workspace
       # Open-skills repository (cloned by zeroclaw at runtime)
