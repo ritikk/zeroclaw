@@ -76,7 +76,7 @@ EOF
 # ── Stage 2: Development Runtime (Debian) ────────────────────
 FROM debian:trixie-slim@sha256:f6e2cfac5cf956ea044b4bd75e6397b4372ad88fe00908045e9a0d21712ae3ba AS dev
 
-# Install essential runtime dependencies only (use docker-compose.override.yml for dev tools)
+# Install essential runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
@@ -84,6 +84,17 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
+# Node.js 20 LTS (for agent-browser CLI)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Browser automation CLI + Playwright browsers (fixed path for nonroot user)
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+RUN npm install -g agent-browser \
+    && npx playwright install --with-deps chromium
+
+# Python tools
 COPY python/ /tmp/zeroclaw-tools/
 RUN pip install /tmp/zeroclaw-tools --break-system-packages && rm -rf /tmp/zeroclaw-tools
 
@@ -92,14 +103,18 @@ COPY --from=builder /app/zeroclaw /usr/local/bin/zeroclaw
 
 # Overwrite minimal config with DEV template (Ollama defaults)
 COPY dev/config.template.toml /zeroclaw-data/.zeroclaw/config.toml
-RUN chown 65534:65534 /zeroclaw-data/.zeroclaw/config.toml
+
+# Writable dirs for browser and npm cache under nonroot user
+RUN mkdir -p /tmp/runtime /zeroclaw-data/.npm /zeroclaw-data/.cache \
+    && chown -R 65534:65534 /zeroclaw-data /tmp/runtime
 
 # Environment setup
 ENV ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace
 ENV HOME=/zeroclaw-data
-ENV PROVIDER="ollama"
-ENV ZEROCLAW_MODEL="llama3.2"
 ENV ZEROCLAW_GATEWAY_PORT=42617
+ENV XDG_RUNTIME_DIR=/tmp/runtime
+# Provider and model are intentionally NOT set here.
+# Set them in config.toml (mounted at runtime) so they can be changed without a rebuild.
 
 WORKDIR /zeroclaw-data
 USER 65534:65534

@@ -1685,10 +1685,12 @@ fn build_native_assistant_history(
         })
         .collect();
 
+    // Use empty string instead of null — some providers (e.g. Arcee Trinity)
+    // require content to always be a string, even on tool-call-only turns.
     let content = if text.trim().is_empty() {
-        serde_json::Value::Null
+        String::new()
     } else {
-        serde_json::Value::String(text.trim().to_string())
+        text.trim().to_string()
     };
 
     let mut obj = serde_json::json!({
@@ -1722,10 +1724,11 @@ fn build_native_assistant_history_from_parsed_calls(
         })
         .collect::<Option<Vec<_>>>()?;
 
+    // Use empty string instead of null — some providers require content to be a string.
     let content = if text.trim().is_empty() {
-        serde_json::Value::Null
+        String::new()
     } else {
-        serde_json::Value::String(text.trim().to_string())
+        text.trim().to_string()
     };
 
     let mut obj = serde_json::json!({
